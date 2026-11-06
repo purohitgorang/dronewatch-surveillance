@@ -43,7 +43,7 @@ class DetectionLog(BaseModel):
 
 class ConfigRequest(BaseModel):
     api_key: Optional[str] = None
-    confidence_threshold: Optional[float] = 0.25
+    confidence_threshold: Optional[float] = 0.65
 
 @app.get("/")
 async def root():
@@ -78,9 +78,11 @@ async def configure(request: Optional[ConfigRequest] = None):
 @app.post("/detect")
 async def detect(
     file: UploadFile = File(...),
-    conf: float = Query(0.25, ge=0.05, le=0.95, description="Confidence threshold")
+    conf: float = Query(0.65, ge=0.10, le=0.95, description="Confidence threshold")
 ):
     contents = await file.read()
+    if len(contents) < 500:
+        return {"detected": False, "message": "Frame empty"}
     result = detector.detect(contents, conf_threshold=conf)
     
     if result.get("is_drone"):

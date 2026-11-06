@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Shield, AlertTriangle, Activity, 
-  Cpu, Crosshair, Upload, Play, Square, Trash2, CheckCircle2 
+  Cpu, Crosshair, Upload, Play, Square, Trash2, CheckCircle2, VideoOff
 } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
@@ -14,9 +14,10 @@ function App() {
     cuda_accelerated: false
   });
   const [logs, setLogs] = useState([]);
+  const [isCameraActive, setIsCameraActive] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [mode, setMode] = useState('webcam'); // 'webcam' | 'upload'
-  const [confidenceThreshold, setConfidenceThreshold] = useState(0.25);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.65);
   const [lastLatency, setLastLatency] = useState(null);
   const [latestDetection, setLatestDetection] = useState(null);
   const [uploadedImageSrc, setUploadedImageSrc] = useState(null);
@@ -29,14 +30,13 @@ function App() {
   const uploadImgRef = useRef(null);
   const intervalRef = useRef(null);
 
-  // Check backend offline AI health on load
+  // Check backend offline AI health on load - DO NOT auto-start camera
   useEffect(() => {
     fetchSystemStatus();
-    fetchLogs();
-    startCamera();
+    // Start with a clean session log
+    setLogs([]);
     return () => {
       stopCamera();
-      stopDetection();
     };
   }, []);
 
@@ -53,18 +53,6 @@ function App() {
     }
   };
 
-  const fetchLogs = async () => {
-    try {
-      const res = await fetch(`${API_URL}/logs`);
-      if (res.ok) {
-        const data = await res.json();
-        setLogs(data);
-      }
-    } catch (err) {
-      console.warn("Could not fetch logs:", err);
-    }
-  };
-
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -72,22 +60,32 @@ function App() {
       });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.play();
+        setIsCameraActive(true);
+        startDetection();
       }
     } catch (err) {
       console.error("Webcam access error:", err);
+      alert("Could not access webcam. Please check browser camera permissions.");
+      setIsCameraActive(false);
     }
   };
 
   const stopCamera = () => {
     if (videoRef.current && videoRef.current.srcObject) {
       videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
     }
+    setIsCameraActive(false);
     stopDetection();
+    clearOverlay(overlayCanvasRef);
+    setLatestDetection(null);
   };
 
   const startDetection = () => {
     setIsDetecting(true);
-    // Poll detection every 1.5 seconds for responsive edge detection
+    // Poll detection every 1.5 seconds
+    if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(captureAndDetect, 1500);
   };
 
@@ -98,6 +96,7 @@ function App() {
       intervalRef.current = null;
     }
     clearOverlay(overlayCanvasRef);
+    setLatestDetection(null);
   };
 
   const clearOverlay = (canvasRef) => {
@@ -117,7 +116,6 @@ function App() {
     if (!boxes || boxes.length === 0) return;
 
     boxes.forEach(det => {
-      // box_norm format: [ymin, xmin, ymax, xmax] (0.0 to 1.0)
       if (det.box_norm) {
         const [ymin, xmin, ymax, xmax] = det.box_norm;
         const x = xmin * containerWidth;
@@ -126,28 +124,27 @@ function App() {
         const h = (ymax - ymin) * containerHeight;
 
         // Draw tactical radar box
-        ctx.strokeStyle = '#ef4444'; // Red alert
+        ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 3;
         ctx.strokeRect(x, y, w, h);
 
-        // Corner brackets for military HUD style
-        const bracketLen = 12;
-        ctx.strokeStyle = '#22c55e'; // Green accents
+        // Corner brackets
+        const bracketLen = 14;
+        ctx.strokeStyle = '#22c55e';
         ctx.lineWidth = 4;
         
-        // Top-left
         ctx.beginPath();
         ctx.moveTo(x, y + bracketLen); ctx.lineTo(x, y); ctx.lineTo(x + bracketLen, y);
         ctx.stroke();
-        // Top-right
+
         ctx.beginPath();
         ctx.moveTo(x + w - bracketLen, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + bracketLen);
         ctx.stroke();
-        // Bottom-left
+
         ctx.beginPath();
         ctx.moveTo(x, y + h - bracketLen); ctx.lineTo(x, y + h); ctx.lineTo(x + bracketLen, y + h);
         ctx.stroke();
-        // Bottom-right
+
         ctx.beginPath();
         ctx.moveTo(x + w - bracketLen, y + h); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y + h - bracketLen);
         ctx.stroke();
@@ -169,13 +166,27 @@ function App() {
   const captureAndDetect = async () => {
     if (!videoRef.current || !captureCanvasRef.current) return;
     const video = videoRef.current;
-    if (video.videoWidth === 0 || video.videoHeight === 0) return;
+    if (video.videoWidth === 0 || video.videoHeight === 0 || video.paused || video.ended) return;
 
     const canvas = captureCanvasRef.current;
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Frame sanity check: verify camera is actually transmitting real visual pixels
+    const sampleData = ctx.getImageData(0, 0, Math.min(100, canvas.width), Math.min(100, canvas.height)).data;
+    let sum = 0;
+    for (let i = 0; i < sampleData.length; i += 4) {
+      sum += (sampleData[i] + sampleData[i+1] + sampleData[i+2]) / 3;
+    }
+    const avgBrightness = sum / (sampleData.length / 4);
+    // If frame is pure uninitialized black (sensor warming up or shutter closed), skip
+    if (avgBrightness < 5) {
+      clearOverlay(overlayCanvasRef);
+      setLatestDetection(null);
+      return;
+    }
 
     canvas.toBlob(async (blob) => {
       if (!blob) return;
@@ -241,7 +252,6 @@ function App() {
         setLogs(prev => [data.data, ...prev]);
         setLatestDetection(data.data);
         
-        // Wait for image render then draw overlay
         setTimeout(() => {
           if (uploadImgRef.current) {
             drawBoundingBoxes(
@@ -267,6 +277,9 @@ function App() {
     try {
       await fetch(`${API_URL}/logs`, { method: 'DELETE' });
       setLogs([]);
+      setLatestDetection(null);
+      clearOverlay(overlayCanvasRef);
+      clearOverlay(uploadOverlayCanvasRef);
     } catch (err) {
       setLogs([]);
     }
@@ -274,7 +287,7 @@ function App() {
 
   return (
     <div className="container">
-      {/* Top Navigation / Brand */}
+      {/* Top Header */}
       <header className="header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <Shield size={32} color="#60a5fa" />
@@ -296,9 +309,9 @@ function App() {
           <div className="status-pill">
             <div 
               className="status-dot" 
-              style={{ backgroundColor: isDetecting || mode === 'upload' ? '#22c55e' : '#eab308' }} 
+              style={{ backgroundColor: isCameraActive && isDetecting ? '#22c55e' : (mode === 'upload' ? '#38bdf8' : '#eab308') }} 
             />
-            <span>{isDetecting ? 'Live Radar Active' : (mode === 'upload' ? 'Upload Ready' : 'Standby')}</span>
+            <span>{isCameraActive && isDetecting ? 'Surveillance Active' : (mode === 'upload' ? 'Upload Ready' : 'Standby (Camera Off)')}</span>
           </div>
         </div>
       </header>
@@ -307,36 +320,51 @@ function App() {
       <div className="mode-tabs">
         <button 
           className={`tab-btn ${mode === 'webcam' ? 'active' : ''}`}
-          onClick={() => { setMode('webcam'); startCamera(); }}
+          onClick={() => { setMode('webcam'); }}
         >
           <Camera size={16} /> Live Webcam Surveillance
         </button>
         <button 
           className={`tab-btn ${mode === 'upload' ? 'active' : ''}`}
-          onClick={() => { setMode('upload'); stopDetection(); }}
+          onClick={() => { setMode('upload'); stopCamera(); }}
         >
           <Upload size={16} /> Test Drone Image / File
         </button>
       </div>
 
       <div className="main-grid">
-        {/* Visual Stream Panel */}
+        {/* Visual Viewport Panel */}
         <div className="glass-panel">
           {mode === 'webcam' ? (
             <div className="webcam-container">
-              <video ref={videoRef} autoPlay playsInline muted />
-              <canvas ref={captureCanvasRef} style={{ display: 'none' }} />
-              <canvas ref={overlayCanvasRef} className="hud-overlay-canvas" />
+              {isCameraActive ? (
+                <>
+                  <video ref={videoRef} autoPlay playsInline muted />
+                  <canvas ref={captureCanvasRef} style={{ display: 'none' }} />
+                  <canvas ref={overlayCanvasRef} className="hud-overlay-canvas" />
 
-              <div className="overlay">
-                <Crosshair size={16} color="#ef4444" />
-                <span>Real-Time Edge Airspace Feed</span>
-              </div>
+                  <div className="overlay">
+                    <Crosshair size={16} color="#ef4444" />
+                    <span>Live Optical Feed (Active)</span>
+                  </div>
 
-              {latestDetection && (
-                <div className="alert-hud">
-                  <AlertTriangle size={18} color="#ef4444" />
-                  <span>ALERT: {latestDetection.drone_name} Detected!</span>
+                  {latestDetection && (
+                    <div className="alert-hud">
+                      <AlertTriangle size={18} color="#ffffff" />
+                      <span>TARGET IDENTIFIED: {latestDetection.drone_name}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="camera-standby-view">
+                  <VideoOff size={48} color="#64748b" style={{ marginBottom: '1rem' }} />
+                  <h3>Optical Sensor in Standby</h3>
+                  <p style={{ color: '#94a3b8', fontSize: '0.9rem', maxWidth: '360px', margin: '0 auto 1.5rem' }}>
+                    Webcam is currently inactive. Click below to initialize optical tracking.
+                  </p>
+                  <button className="btn btn-detect" onClick={startCamera}>
+                    <Play size={16} /> Start Live Surveillance Feed
+                  </button>
                 </div>
               )}
             </div>
@@ -357,7 +385,7 @@ function App() {
                   <Upload size={48} color="#60a5fa" style={{ marginBottom: '1rem' }} />
                   <h3>Upload Airspace Image to Inspect</h3>
                   <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
-                    Drag and drop or select a drone snapshot for instant local YOLOv8 evaluation.
+                    Select a drone photo or snapshot for instant local GPU evaluation.
                   </p>
                 </div>
               )}
@@ -377,31 +405,25 @@ function App() {
             </div>
           )}
 
-          {/* Tactical Controls & Tuning */}
+          {/* Controls */}
           <div className="controls-row">
-            {mode === 'webcam' && (
+            {mode === 'webcam' && isCameraActive && (
               <div>
-                {!isDetecting ? (
-                  <button className="btn btn-detect" onClick={startDetection}>
-                    <Play size={16} /> Start Edge Detection
-                  </button>
-                ) : (
-                  <button className="btn btn-stop" onClick={stopDetection}>
-                    <Square size={16} /> Halt Detection
-                  </button>
-                )}
+                <button className="btn btn-stop" onClick={stopCamera}>
+                  <Square size={16} /> Stop Surveillance
+                </button>
               </div>
             )}
 
             {/* Sensitivity Slider */}
             <div className="slider-group">
               <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-                Confidence Threshold: <strong>{(confidenceThreshold * 100).toFixed(0)}%</strong>
+                Confidence Sensitivity: <strong>{(confidenceThreshold * 100).toFixed(0)}%</strong>
               </span>
               <input 
                 type="range" 
-                min="0.10" 
-                max="0.90" 
+                min="0.30" 
+                max="0.95" 
                 step="0.05"
                 value={confidenceThreshold}
                 onChange={(e) => setConfidenceThreshold(parseFloat(e.target.value))}
@@ -437,7 +459,7 @@ function App() {
                 <CheckCircle2 size={36} color="#64748b" style={{ marginBottom: '0.5rem' }} />
                 <div>Airspace Clear</div>
                 <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.25rem' }}>
-                  No unauthorized drones detected yet.
+                  No unauthorized drones detected in this session.
                 </div>
               </div>
             ) : (
