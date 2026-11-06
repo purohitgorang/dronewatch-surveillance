@@ -173,7 +173,7 @@ function App() {
       formData.append('file', blob, 'webcam_frame.jpg');
 
       try {
-        const res = await fetch(`${API_URL}/detect?conf=${confidenceThreshold}`, {
+        const res = await fetch(`${API_URL}/detect?conf=${confidenceThreshold}&is_stream=true`, {
           method: 'POST',
           body: formData
         });

@@ -263,13 +263,14 @@ async def configure(request: Optional[ConfigRequest] = None):
 @app.post("/detect")
 async def detect(
     file: UploadFile = File(...),
-    conf: float = Query(0.50, ge=0.10, le=0.95, description="Confidence threshold")
+    conf: float = Query(0.50, ge=0.10, le=0.95, description="Confidence threshold"),
+    is_stream: bool = Query(False, description="Whether this frame is from live stream")
 ):
     contents = await file.read()
     if len(contents) < 500:
         return {"detected": False, "message": "Frame buffer empty"}
         
-    result = detector.detect(contents, conf_threshold=conf)
+    result = detector.detect(contents, conf_threshold=conf, is_video_stream=is_stream)
     
     if result.get("is_drone"):
         log_entry = {
