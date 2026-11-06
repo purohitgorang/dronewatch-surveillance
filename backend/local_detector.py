@@ -33,8 +33,8 @@ class LocalDroneDetector:
             torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
         )
         
-        print(f"[DroneWatch] Loading local YOLOv8 drone model from: {self.model_path}")
-        print(f"[DroneWatch] Compute device: {self.device} ({self.device_name})")
+        print(f"[Drone Hawk X] Loading local YOLOv8 drone model from: {self.model_path}")
+        print(f"[Drone Hawk X] Compute device: {self.device} ({self.device_name})")
         
         if not os.path.exists(self.model_path):
             raise FileNotFoundError(f"Model file not found at: {self.model_path}")
@@ -43,7 +43,7 @@ class LocalDroneDetector:
         # Warmup model on device
         dummy = np.zeros((480, 640, 3), dtype=np.uint8)
         self.model(dummy, device=self.device, verbose=False)
-        print(f"[DroneWatch] Local drone model initialized and ready for real-time inference.")
+        print(f"[Drone Hawk X] Local drone model initialized and ready for real-time inference.")
 
     def detect(self, image_bytes: bytes, conf_threshold: float = 0.25) -> Dict[str, Any]:
         """
@@ -127,7 +127,7 @@ class LocalDroneDetector:
 
         except Exception as e:
             elapsed_ms = round((time.time() - start_time) * 1000, 1)
-            print(f"[DroneWatch] Inference error: {e}")
+            print(f"[Drone Hawk X] Inference error: {e}")
             return {
                 "is_drone": False,
                 "drone_name": None,

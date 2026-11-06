@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from local_detector import LocalDroneDetector
 
 app = FastAPI(
-    title="DroneWatch AI - Local Edge Detection API",
+    title="Drone Hawk X - Local Edge Detection API",
     description="Offline, high-accuracy UAV/Drone detection powered by local YOLOv8 neural network on PyTorch CUDA.",
     version="2.0.0"
 )
@@ -48,7 +48,7 @@ class ConfigRequest(BaseModel):
 @app.get("/")
 async def root():
     return {
-        "system": "DroneWatch AI",
+        "system": "Drone Hawk X",
         "mode": "Offline Edge Detection",
         "model": "YOLOv8n-Drone (Fine-Tuned)",
         "device": detector.device_name,

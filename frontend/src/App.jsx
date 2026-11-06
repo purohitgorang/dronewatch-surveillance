@@ -279,7 +279,7 @@ function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <Shield size={32} color="#60a5fa" />
           <div>
-            <div className="title">DroneWatch AI</div>
+            <div className="title">Drone Hawk X</div>
             <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
               Offline Edge Airspace Surveillance Engine • Local PyTorch CUDA
             </div>

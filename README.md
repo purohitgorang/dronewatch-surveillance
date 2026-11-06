@@ -1,4 +1,4 @@
-# 🛸 DroneWatch: Real-Time Offline Edge Airspace Surveillance
+# 🦅 Drone Hawk X: Real-Time Offline Edge Airspace Surveillance
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-green.svg)](https://fastapi.tiangolo.com/)
@@ -6,7 +6,7 @@
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-Edge%20Vision-orange.svg)](https://github.com/ultralytics/ultralytics)
 [![PyTorch CUDA](https://img.shields.io/badge/PyTorch-CUDA%20Accelerated-76b900.svg)](https://pytorch.org/)
 
-**DroneWatch** is an enterprise-grade, offline edge AI airspace perimeter monitoring platform. Designed specifically for zero-trust, air-gapped, or field tactical environments, DroneWatch operates **100% locally on-device with zero external API keys, zero cloud egress, and zero internet dependencies**.
+**Drone Hawk X** is an enterprise-grade, offline edge AI airspace perimeter monitoring platform. Designed specifically for zero-trust, air-gapped, or field tactical environments, Drone Hawk X operates **100% locally on-device with zero external API keys, zero cloud egress, and zero internet dependencies**.
 
 ---
 
@@ -26,7 +26,7 @@
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│                   DroneWatch Client                    │
+│                  Drone Hawk X Client                   │
 │      React 19 + Vite + Lucide HUD Interface (Port 5173)│
 └───────────────────────────┬────────────────────────────┘
                             │ HTTP POST (Multipart Image)
