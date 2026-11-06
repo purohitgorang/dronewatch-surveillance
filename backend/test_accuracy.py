@@ -32,7 +32,7 @@ def main():
         {"id": "DRONE_06", "expected": True, "filename": "drone_mavic.jpg", "desc": "DJI Mavic Folding Drone"},
         {"id": "DRONE_07", "expected": True, "filename": "drone_mini.jpg", "desc": "Ultra-Light Micro Drone"},
         {"id": "DRONE_08", "expected": True, "filename": "drone_field.jpg", "desc": "Facility Perimeter Drone"},
-        # --- 8 DISTRACTORS ---
+        # --- DISTRACTORS & ANTI-SPOOF ---
         {"id": "DIST_01", "expected": False, "filename": "distractor_seagull.jpg", "desc": "Seagull in Flight (Wildlife)"},
         {"id": "DIST_02", "expected": False, "filename": "bird_sky.jpg", "desc": "Bird in High Sky (Wildlife)"},
         {"id": "DIST_03", "expected": False, "filename": "distractor_helicopter.jpg", "desc": "Manned Rescue Helicopter"},
@@ -40,7 +40,8 @@ def main():
         {"id": "DIST_05", "expected": False, "filename": "distractor_kite.jpg", "desc": "Kite in Wind Current"},
         {"id": "DIST_06", "expected": False, "filename": "distractor_room_lamp.jpg", "desc": "Indoor Ceiling Pendant Lamp"},
         {"id": "DIST_07", "expected": False, "filename": "office_interior.jpg", "desc": "Office Interior Workstation"},
-        {"id": "DIST_08", "expected": False, "filename": "street_cars.jpg", "desc": "Urban Traffic Vehicles"}
+        {"id": "DIST_08", "expected": False, "filename": "street_cars.jpg", "desc": "Urban Traffic Vehicles"},
+        {"id": "SPOOF_01", "expected": False, "filename": "distractor_phone_drone.jpg", "desc": "Drone on Phone Screen (Spoof)"}
     ]
 
     OPERATIONAL_CONFIDENCE = 0.50

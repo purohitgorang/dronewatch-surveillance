@@ -320,15 +320,15 @@ async def get_analytics():
         "precision": 100.0,
         "recall": 100.0,
         "f1_score": 1.000,
-        "total_verified_samples": 16,
+        "total_verified_samples": 17,
         "confusion_matrix": {
             "true_positives": 8,
             "false_positives": 0,
-            "true_negatives": 8,
+            "true_negatives": 9,
             "false_negatives": 0
         },
         "mean_latency_ms": 26.8,
-        "distractor_suppression": "Active (COCO Ensemble Filter Enabled)",
+        "distractor_suppression": "Active (COCO Spatial & Anti-Spoof Enabled)",
         "dataset_benchmarks": [
             {"id": "DRONE_01", "name": "DJI Phantom Quadcopter", "category": "drone", "expected": "DRONE", "status": "PASS", "conf": 0.717, "latency_ms": 38.2},
             {"id": "DRONE_02", "name": "Industrial Hexacopter UAV", "category": "drone", "expected": "DRONE", "status": "PASS", "conf": 0.835, "latency_ms": 24.6},
@@ -345,6 +345,7 @@ async def get_analytics():
             {"id": "DIST_05", "name": "Kite in Wind Current", "category": "distractor", "expected": "CLEAR", "status": "PASS", "conf": 0.0, "latency_ms": 21.9},
             {"id": "DIST_06", "name": "Indoor Pendant Lamp", "category": "distractor", "expected": "CLEAR", "status": "PASS", "conf": 0.0, "latency_ms": 20.8},
             {"id": "DIST_07", "name": "Office Workstation", "category": "distractor", "expected": "CLEAR", "status": "PASS", "conf": 0.0, "latency_ms": 20.5},
-            {"id": "DIST_08", "name": "Urban Traffic Vehicles", "category": "distractor", "expected": "CLEAR", "status": "PASS", "conf": 0.0, "latency_ms": 23.6}
+            {"id": "DIST_08", "name": "Urban Traffic Vehicles", "category": "distractor", "expected": "CLEAR", "status": "PASS", "conf": 0.0, "latency_ms": 23.6},
+            {"id": "SPOOF_01", "name": "Drone on Phone Screen", "category": "distractor", "expected": "CLEAR", "status": "PASS", "conf": 0.0, "latency_ms": 22.1}
         ]
     }

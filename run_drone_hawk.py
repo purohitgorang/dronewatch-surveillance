@@ -73,8 +73,11 @@ except Exception:
 
 try:
     while True:
-        time.sleep(30)
-except KeyboardInterrupt:
-    print("\nStopping Drone Hawk X services...")
-    p_backend.terminate()
-    p_frontend.terminate()
+        # Monitor child processes; restart if any exits
+        if p_backend.poll() is not None:
+            p_backend = subprocess.Popen(backend_cmd, cwd=backend_cwd, stdout=backend_log, stderr=subprocess.STDOUT)
+        if p_frontend.poll() is not None:
+            p_frontend = subprocess.Popen(frontend_cmd, cwd=frontend_cwd, stdout=frontend_log, stderr=subprocess.STDOUT)
+        time.sleep(10)
+except Exception as e:
+    time.sleep(3600)
