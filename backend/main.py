@@ -1,12 +1,20 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 import datetime
-from gemini_service import GeminiService
 import os
+import sys
 
-app = FastAPI()
+# Ensure local detector import resolves
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from local_detector import LocalDroneDetector
+
+app = FastAPI(
+    title="DroneWatch AI - Local Edge Detection API",
+    description="Offline, high-accuracy UAV/Drone detection powered by local YOLOv8 neural network on PyTorch CUDA.",
+    version="2.0.0"
+)
 
 # CORS
 app.add_middleware(
@@ -17,66 +25,96 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory storage for logs
-logs = []
+# Initialize local offline drone detector
+detector = LocalDroneDetector()
+
+# In-memory storage for detection history logs
+logs: List[Dict[str, Any]] = []
 
 class DetectionLog(BaseModel):
     id: int
     timestamp: str
     drone_name: Optional[str]
     confidence: float
+    box: Optional[List[float]] = None
+    box_norm: Optional[List[float]] = None
+    device: Optional[str] = None
+    inference_ms: Optional[float] = None
 
 class ConfigRequest(BaseModel):
-    api_key: str
+    api_key: Optional[str] = None
+    confidence_threshold: Optional[float] = 0.25
 
-gemini_service = None
+@app.get("/")
+async def root():
+    return {
+        "system": "DroneWatch AI",
+        "mode": "Offline Edge Detection",
+        "model": "YOLOv8n-Drone (Fine-Tuned)",
+        "device": detector.device_name,
+        "classes": list(LocalDroneDetector.FRIENDLY_NAMES.values())[:2],
+        "status": "active"
+    }
 
-# Auto-configure if GEMINI_API_KEY environment variable or .env file exists
-_env_key = os.getenv("GEMINI_API_KEY")
-_env_file = os.path.join(os.path.dirname(__file__), ".env")
-if not _env_key and os.path.exists(_env_file):
-    try:
-        with open(_env_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                if line.strip().startswith("GEMINI_API_KEY="):
-                    _env_key = line.strip().split("=", 1)[1].strip().strip('"').strip("'")
-    except Exception:
-        pass
-
-if _env_key:
-    try:
-        gemini_service = GeminiService(_env_key)
-        print("[+] Gemini Service auto-initialized from environment.")
-    except Exception as e:
-        print(f"[-] Could not auto-initialize Gemini Service: {e}")
+@app.get("/status")
+async def get_status():
+    return {
+        "status": "ready",
+        "engine": "Local YOLOv8 Offline Edge AI",
+        "device": detector.device_name,
+        "cuda_accelerated": "cuda" in detector.device,
+        "logs_count": len(logs)
+    }
 
 @app.post("/config")
-async def configure(request: ConfigRequest):
-    global gemini_service
-    gemini_service = GeminiService(request.api_key)
-    return {"status": "configured"}
+async def configure(request: Optional[ConfigRequest] = None):
+    # Backward compatibility endpoint - no external API key needed
+    return {
+        "status": "configured",
+        "message": "Local offline model ready. No cloud API key required.",
+        "device": detector.device_name
+    }
 
 @app.post("/detect")
-async def detect(file: UploadFile = File(...)):
-    global gemini_service
-    if not gemini_service:
-        raise HTTPException(status_code=400, detail="API Key not configured. Please supply GEMINI_API_KEY via UI config or .env")
-    
+async def detect(
+    file: UploadFile = File(...),
+    conf: float = Query(0.25, ge=0.05, le=0.95, description="Confidence threshold")
+):
     contents = await file.read()
-    result = gemini_service.analyze_image(contents)
+    result = detector.detect(contents, conf_threshold=conf)
     
     if result.get("is_drone"):
         log_entry = {
             "id": len(logs) + 1,
             "timestamp": datetime.datetime.now().isoformat(),
-            "drone_name": result.get("drone_name", "Unknown Drone"),
-            "confidence": result.get("confidence", 0.0)
+            "drone_name": result.get("drone_name", "Quadcopter (UAV)"),
+            "confidence": result.get("confidence", 0.0),
+            "box": result.get("box"),
+            "box_norm": result.get("box_norm"),
+            "device": result.get("device"),
+            "inference_ms": result.get("inference_ms"),
         }
-        logs.insert(0, log_entry) # Add to top
-        return {"detected": True, "data": log_entry}
+        logs.insert(0, log_entry)  # Prepend newest detection
+        return {
+            "detected": True,
+            "data": log_entry,
+            "all_detections": result.get("detections", []),
+            "inference_ms": result.get("inference_ms"),
+            "device": result.get("device")
+        }
     
-    return {"detected": False}
+    return {
+        "detected": False,
+        "inference_ms": result.get("inference_ms"),
+        "device": result.get("device")
+    }
 
 @app.get("/logs", response_model=List[DetectionLog])
 async def get_logs():
     return logs
+
+@app.delete("/logs")
+async def clear_logs():
+    global logs
+    logs = []
+    return {"status": "cleared"}
