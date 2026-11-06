@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional, Any, Dict
 import datetime
@@ -25,6 +26,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount test samples statically
+samples_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_samples")
+if os.path.exists(samples_dir):
+    app.mount("/samples", StaticFiles(directory=samples_dir), name="samples")
+
 # Initialize local offline drone detector
 detector = LocalDroneDetector()
 
@@ -43,7 +49,7 @@ class DetectionLog(BaseModel):
 
 class ConfigRequest(BaseModel):
     api_key: Optional[str] = None
-    confidence_threshold: Optional[float] = 0.65
+    confidence_threshold: Optional[float] = 0.55
 
 @app.get("/")
 async def root():
@@ -66,23 +72,80 @@ async def get_status():
         "logs_count": len(logs)
     }
 
-@app.post("/config")
-async def configure(request: Optional[ConfigRequest] = None):
-    # Backward compatibility endpoint - no external API key needed
-    return {
-        "status": "configured",
-        "message": "Local offline model ready. No cloud API key required.",
-        "device": detector.device_name
-    }
+@app.get("/api/sample-images")
+async def get_sample_images():
+    """Return available benchmark test samples with category tags."""
+    return [
+        {
+            "id": "drone_phantom",
+            "filename": "drone_phantom.jpg",
+            "name": "DJI Phantom Quadcopter",
+            "category": "drone",
+            "url": "http://localhost:8000/samples/drone_phantom.jpg"
+        },
+        {
+            "id": "drone_hover",
+            "filename": "drone_hover.jpg",
+            "name": "Commercial Drone in Hover",
+            "category": "drone",
+            "url": "http://localhost:8000/samples/drone_hover.jpg"
+        },
+        {
+            "id": "drone_fpv",
+            "filename": "drone_fpv.jpg",
+            "name": "FPV Multi-Rotor Racer",
+            "category": "drone",
+            "url": "http://localhost:8000/samples/drone_fpv.jpg"
+        },
+        {
+            "id": "drone_aerial",
+            "filename": "drone_aerial.jpg",
+            "name": "Aerial Cinematography Drone",
+            "category": "drone",
+            "url": "http://localhost:8000/samples/drone_aerial.jpg"
+        },
+        {
+            "id": "bird_sky",
+            "filename": "bird_sky.jpg",
+            "name": "Bird in Flight (Negative)",
+            "category": "distractor",
+            "url": "http://localhost:8000/samples/bird_sky.jpg"
+        },
+        {
+            "id": "airplane_sky",
+            "filename": "airplane_sky.jpg",
+            "name": "Commercial Aircraft (Negative)",
+            "category": "distractor",
+            "url": "http://localhost:8000/samples/airplane_sky.jpg"
+        },
+        {
+            "id": "office_interior",
+            "filename": "office_interior.jpg",
+            "name": "Indoor Office (Negative)",
+            "category": "distractor",
+            "url": "http://localhost:8000/samples/office_interior.jpg"
+        },
+        {
+            "id": "street_cars",
+            "filename": "street_cars.jpg",
+            "name": "City Traffic (Negative)",
+            "category": "distractor",
+            "url": "http://localhost:8000/samples/street_cars.jpg"
+        }
+    ]
 
-@app.post("/detect")
-async def detect(
-    file: UploadFile = File(...),
-    conf: float = Query(0.65, ge=0.10, le=0.95, description="Confidence threshold")
+@app.post("/api/test-sample/{filename}")
+async def test_sample(
+    filename: str,
+    conf: float = Query(0.55, ge=0.10, le=0.95)
 ):
-    contents = await file.read()
-    if len(contents) < 500:
-        return {"detected": False, "message": "Frame empty"}
+    filepath = os.path.join(samples_dir, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Sample image not found")
+    
+    with open(filepath, "rb") as f:
+        contents = f.read()
+        
     result = detector.detect(contents, conf_threshold=conf)
     
     if result.get("is_drone"):
@@ -96,7 +159,54 @@ async def detect(
             "device": result.get("device"),
             "inference_ms": result.get("inference_ms"),
         }
-        logs.insert(0, log_entry)  # Prepend newest detection
+        logs.insert(0, log_entry)
+        return {
+            "detected": True,
+            "data": log_entry,
+            "all_detections": result.get("detections", []),
+            "inference_ms": result.get("inference_ms"),
+            "device": result.get("device"),
+            "sample_url": f"http://localhost:8000/samples/{filename}"
+        }
+    
+    return {
+        "detected": False,
+        "inference_ms": result.get("inference_ms"),
+        "device": result.get("device"),
+        "sample_url": f"http://localhost:8000/samples/{filename}"
+    }
+
+@app.post("/config")
+async def configure(request: Optional[ConfigRequest] = None):
+    return {
+        "status": "configured",
+        "message": "Local offline model ready. No cloud API key required.",
+        "device": detector.device_name
+    }
+
+@app.post("/detect")
+async def detect(
+    file: UploadFile = File(...),
+    conf: float = Query(0.55, ge=0.10, le=0.95, description="Confidence threshold")
+):
+    contents = await file.read()
+    if len(contents) < 500:
+        return {"detected": False, "message": "Frame buffer empty"}
+        
+    result = detector.detect(contents, conf_threshold=conf)
+    
+    if result.get("is_drone"):
+        log_entry = {
+            "id": len(logs) + 1,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "drone_name": result.get("drone_name", "Quadcopter (UAV)"),
+            "confidence": result.get("confidence", 0.0),
+            "box": result.get("box"),
+            "box_norm": result.get("box_norm"),
+            "device": result.get("device"),
+            "inference_ms": result.get("inference_ms"),
+        }
+        logs.insert(0, log_entry)
         return {
             "detected": True,
             "data": log_entry,

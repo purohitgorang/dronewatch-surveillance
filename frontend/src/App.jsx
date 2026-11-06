@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Shield, AlertTriangle, Activity, 
-  Cpu, Crosshair, Upload, Play, Square, Trash2, CheckCircle2, VideoOff
+  Cpu, Crosshair, Upload, Play, Square, Trash2, CheckCircle2, VideoOff, Check, X
 } from 'lucide-react';
 
 const API_URL = 'http://localhost:8000';
@@ -16,29 +16,40 @@ function App() {
   const [logs, setLogs] = useState([]);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
-  const [mode, setMode] = useState('webcam'); // 'webcam' | 'upload'
-  const [confidenceThreshold, setConfidenceThreshold] = useState(0.65);
+  const [mode, setMode] = useState('upload'); // Default to upload so user can test immediately with 1 click!
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.55);
   const [lastLatency, setLastLatency] = useState(null);
   const [latestDetection, setLatestDetection] = useState(null);
-  const [uploadedImageSrc, setUploadedImageSrc] = useState(null);
-  const [isProcessingUpload, setIsProcessingUpload] = useState(false);
+  const [selectedSample, setSelectedSample] = useState(null);
+  const [sampleImages, setSampleImages] = useState([]);
+  const [isLoadingSample, setIsLoadingSample] = useState(false);
+  const [sampleResult, setSampleResult] = useState(null);
 
   const videoRef = useRef(null);
+  const currentStreamRef = useRef(null);
   const captureCanvasRef = useRef(null);
-  const overlayCanvasRef = useRef(null);
-  const uploadOverlayCanvasRef = useRef(null);
-  const uploadImgRef = useRef(null);
-  const intervalRef = useRef(null);
+  const webcamOverlayCanvasRef = useRef(null);
+  const imageCanvasRef = useRef(null);
 
-  // Check backend offline AI health on load - DO NOT auto-start camera
+  // Initialize status and load available test samples
   useEffect(() => {
     fetchSystemStatus();
-    // Start with a clean session log
-    setLogs([]);
+    fetchSampleImages();
     return () => {
       stopCamera();
     };
   }, []);
+
+  // Detection loop when webcam is running
+  useEffect(() => {
+    let interval = null;
+    if (isCameraActive && isDetecting) {
+      interval = setInterval(captureWebcamFrame, 1200);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isCameraActive, isDetecting, confidenceThreshold]);
 
   const fetchSystemStatus = async () => {
     try {
@@ -48,8 +59,20 @@ function App() {
         setSystemStatus(data);
       }
     } catch (err) {
-      console.warn("Backend status poll error:", err);
+      console.warn("Backend status error:", err);
       setSystemStatus(prev => ({ ...prev, status: 'offline' }));
+    }
+  };
+
+  const fetchSampleImages = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/sample-images`);
+      if (res.ok) {
+        const data = await res.json();
+        setSampleImages(data);
+      }
+    } catch (err) {
+      console.warn("Could not load sample images:", err);
     }
   };
 
@@ -58,77 +81,65 @@ function App() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 } }
       });
+      currentStreamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        setIsCameraActive(true);
-        startDetection();
+        videoRef.current.play().catch(e => console.warn("Video play:", e));
       }
+      setIsCameraActive(true);
+      setIsDetecting(true);
     } catch (err) {
-      console.error("Webcam access error:", err);
-      alert("Could not access webcam. Please check browser camera permissions.");
+      console.error("Camera access failed:", err);
+      alert("Webcam access error: " + err.message + "\n\nPlease ensure your camera is plugged in and allowed, or test with the 1-Click Samples!");
       setIsCameraActive(false);
+      setIsDetecting(false);
     }
   };
 
   const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+    if (currentStreamRef.current) {
+      currentStreamRef.current.getTracks().forEach(t => t.stop());
+      currentStreamRef.current = null;
+    }
+    if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
     setIsCameraActive(false);
-    stopDetection();
-    clearOverlay(overlayCanvasRef);
-    setLatestDetection(null);
-  };
-
-  const startDetection = () => {
-    setIsDetecting(true);
-    // Poll detection every 1.5 seconds
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(captureAndDetect, 1500);
-  };
-
-  const stopDetection = () => {
     setIsDetecting(false);
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    clearOverlay(overlayCanvasRef);
+    clearCanvas(webcamOverlayCanvasRef);
     setLatestDetection(null);
   };
 
-  const clearOverlay = (canvasRef) => {
+  const clearCanvas = (canvasRef) => {
     if (canvasRef.current) {
       const ctx = canvasRef.current.getContext('2d');
       ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     }
   };
 
-  const drawBoundingBoxes = (canvas, boxes, containerWidth, containerHeight) => {
+  const drawBoundingBoxesOnCanvas = (canvas, boxes, width, height) => {
     if (!canvas) return;
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext('2d');
-    canvas.width = containerWidth;
-    canvas.height = containerHeight;
-    ctx.clearRect(0, 0, containerWidth, containerHeight);
+    ctx.clearRect(0, 0, width, height);
 
     if (!boxes || boxes.length === 0) return;
 
     boxes.forEach(det => {
       if (det.box_norm) {
         const [ymin, xmin, ymax, xmax] = det.box_norm;
-        const x = xmin * containerWidth;
-        const y = ymin * containerHeight;
-        const w = (xmax - xmin) * containerWidth;
-        const h = (ymax - ymin) * containerHeight;
+        const x = xmin * width;
+        const y = ymin * height;
+        const w = (xmax - xmin) * width;
+        const h = (ymax - ymin) * height;
 
-        // Draw tactical radar box
+        // Tactical Red Box
         ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 3;
         ctx.strokeRect(x, y, w, h);
 
-        // Corner brackets
+        // Green Corner Brackets
         const bracketLen = 14;
         ctx.strokeStyle = '#22c55e';
         ctx.lineWidth = 4;
@@ -149,12 +160,12 @@ function App() {
         ctx.moveTo(x + w - bracketLen, y + h); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y + h - bracketLen);
         ctx.stroke();
 
-        // Label pill
+        // Label Tag
         const label = `${det.drone_name} (${(det.confidence * 100).toFixed(1)}%)`;
         ctx.font = 'bold 12px Inter, sans-serif';
         const textWidth = ctx.measureText(label).width;
 
-        ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.95)';
         ctx.fillRect(x, Math.max(0, y - 24), textWidth + 14, 22);
 
         ctx.fillStyle = '#ffffff';
@@ -163,7 +174,7 @@ function App() {
     });
   };
 
-  const captureAndDetect = async () => {
+  const captureWebcamFrame = async () => {
     if (!videoRef.current || !captureCanvasRef.current) return;
     const video = videoRef.current;
     if (video.videoWidth === 0 || video.videoHeight === 0 || video.paused || video.ended) return;
@@ -174,24 +185,10 @@ function App() {
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Frame sanity check: verify camera is actually transmitting real visual pixels
-    const sampleData = ctx.getImageData(0, 0, Math.min(100, canvas.width), Math.min(100, canvas.height)).data;
-    let sum = 0;
-    for (let i = 0; i < sampleData.length; i += 4) {
-      sum += (sampleData[i] + sampleData[i+1] + sampleData[i+2]) / 3;
-    }
-    const avgBrightness = sum / (sampleData.length / 4);
-    // If frame is pure uninitialized black (sensor warming up or shutter closed), skip
-    if (avgBrightness < 5) {
-      clearOverlay(overlayCanvasRef);
-      setLatestDetection(null);
-      return;
-    }
-
     canvas.toBlob(async (blob) => {
       if (!blob) return;
       const formData = new FormData();
-      formData.append('file', blob, 'feed_frame.jpg');
+      formData.append('file', blob, 'webcam_frame.jpg');
 
       try {
         const res = await fetch(`${API_URL}/detect?conf=${confidenceThreshold}`, {
@@ -205,14 +202,14 @@ function App() {
         if (data.detected) {
           setLogs(prev => [data.data, ...prev]);
           setLatestDetection(data.data);
-          drawBoundingBoxes(
-            overlayCanvasRef.current,
+          drawBoundingBoxesOnCanvas(
+            webcamOverlayCanvasRef.current,
             data.all_detections || [data.data],
             video.clientWidth,
             video.clientHeight
           );
         } else {
-          clearOverlay(overlayCanvasRef);
+          clearCanvas(webcamOverlayCanvasRef);
           setLatestDetection(null);
         }
       } catch (err) {
@@ -221,56 +218,140 @@ function App() {
     }, 'image/jpeg', 0.85);
   };
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setUploadedImageSrc(event.target.result);
-      runUploadInference(file);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const runUploadInference = async (file) => {
-    setIsProcessingUpload(true);
-    clearOverlay(uploadOverlayCanvasRef);
-
-    const formData = new FormData();
-    formData.append('file', file);
+  // Test with 1-Click Sample Image
+  const handleSelectSample = async (sample) => {
+    setSelectedSample(sample);
+    setIsLoadingSample(true);
+    setSampleResult(null);
 
     try {
-      const res = await fetch(`${API_URL}/detect?conf=${confidenceThreshold}`, {
-        method: 'POST',
-        body: formData,
+      const res = await fetch(`${API_URL}/api/test-sample/${sample.filename}?conf=${confidenceThreshold}`, {
+        method: 'POST'
       });
       const data = await res.json();
       if (data.inference_ms) setLastLatency(data.inference_ms);
+      setSampleResult(data);
 
       if (data.detected) {
         setLogs(prev => [data.data, ...prev]);
         setLatestDetection(data.data);
-        
-        setTimeout(() => {
-          if (uploadImgRef.current) {
-            drawBoundingBoxes(
-              uploadOverlayCanvasRef.current,
-              data.all_detections || [data.data],
-              uploadImgRef.current.clientWidth,
-              uploadImgRef.current.clientHeight
-            );
-          }
-        }, 150);
       } else {
         setLatestDetection(null);
-        clearOverlay(uploadOverlayCanvasRef);
       }
+
+      // Render image on canvas with bounding boxes
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = sample.url;
+      img.onload = () => {
+        renderImageWithBoxes(img, data.all_detections || (data.data ? [data.data] : []));
+      };
     } catch (err) {
-      console.error("Upload inference failed:", err);
+      console.error("Sample test failed:", err);
     } finally {
-      setIsProcessingUpload(false);
+      setIsLoadingSample(false);
     }
+  };
+
+  const renderImageWithBoxes = (img, detections) => {
+    const canvas = imageCanvasRef.current;
+    if (!canvas) return;
+
+    // Aspect ratio scale to container
+    const maxW = 760;
+    const maxH = 460;
+    let w = img.width;
+    let h = img.height;
+    const ratio = Math.min(maxW / w, maxH / h, 1.0);
+    w = Math.round(w * ratio);
+    h = Math.round(h * ratio);
+
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+
+    if (detections && detections.length > 0) {
+      detections.forEach(det => {
+        if (det.box_norm) {
+          const [ymin, xmin, ymax, xmax] = det.box_norm;
+          const bx = xmin * w;
+          const by = ymin * h;
+          const bw = (xmax - xmin) * w;
+          const bh = (ymax - ymin) * h;
+
+          // Red Target Box
+          ctx.strokeStyle = '#ef4444';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(bx, by, bw, bh);
+
+          // Green Tactical Corners
+          const len = 14;
+          ctx.strokeStyle = '#22c55e';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(bx, by + len); ctx.lineTo(bx, by); ctx.lineTo(bx + len, by);
+          ctx.moveTo(bx + bw - len, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + len);
+          ctx.moveTo(bx, by + bh - len); ctx.lineTo(bx, by + bh); ctx.lineTo(bx + len, by + bh);
+          ctx.moveTo(bx + bw - len, by + bh); ctx.lineTo(bx + bw, by + bh); ctx.lineTo(bx + bw, by + bh - len);
+          ctx.stroke();
+
+          // Label
+          const tag = `${det.drone_name} (${(det.confidence * 100).toFixed(1)}%)`;
+          ctx.font = 'bold 13px Inter, sans-serif';
+          const tWidth = ctx.measureText(tag).width;
+
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.95)';
+          ctx.fillRect(bx, Math.max(0, by - 26), tWidth + 16, 24);
+
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(tag, bx + 8, Math.max(16, by - 9));
+        }
+      });
+    }
+  };
+
+  const handleCustomUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSelectedSample(null);
+    setIsLoadingSample(true);
+    setSampleResult(null);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = async () => {
+        try {
+          const res = await fetch(`${API_URL}/detect?conf=${confidenceThreshold}`, {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await res.json();
+          if (data.inference_ms) setLastLatency(data.inference_ms);
+          setSampleResult(data);
+
+          if (data.detected) {
+            setLogs(prev => [data.data, ...prev]);
+            setLatestDetection(data.data);
+          } else {
+            setLatestDetection(null);
+          }
+
+          renderImageWithBoxes(img, data.all_detections || (data.data ? [data.data] : []));
+        } catch (err) {
+          console.error("Upload error:", err);
+        } finally {
+          setIsLoadingSample(false);
+        }
+      };
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleClearLogs = async () => {
@@ -278,8 +359,9 @@ function App() {
       await fetch(`${API_URL}/logs`, { method: 'DELETE' });
       setLogs([]);
       setLatestDetection(null);
-      clearOverlay(overlayCanvasRef);
-      clearOverlay(uploadOverlayCanvasRef);
+      clearCanvas(webcamOverlayCanvasRef);
+      clearCanvas(imageCanvasRef);
+      setSampleResult(null);
     } catch (err) {
       setLogs([]);
     }
@@ -290,7 +372,7 @@ function App() {
       {/* Top Header */}
       <header className="header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <Shield size={32} color="#60a5fa" />
+          <Shield size={34} color="#60a5fa" />
           <div>
             <div className="title">Drone Hawk X</div>
             <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
@@ -299,8 +381,8 @@ function App() {
           </div>
         </div>
 
-        {/* System Health Badge */}
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        {/* Hardware & Status Pill */}
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           <div className="edge-badge">
             <Cpu size={14} color="#22c55e" />
             <span>{systemStatus.device || 'NVIDIA GTX 1650'}</span>
@@ -311,24 +393,24 @@ function App() {
               className="status-dot" 
               style={{ backgroundColor: isCameraActive && isDetecting ? '#22c55e' : (mode === 'upload' ? '#38bdf8' : '#eab308') }} 
             />
-            <span>{isCameraActive && isDetecting ? 'Surveillance Active' : (mode === 'upload' ? 'Upload Ready' : 'Standby (Camera Off)')}</span>
+            <span>{isCameraActive && isDetecting ? 'Surveillance Active' : (mode === 'upload' ? 'Test Mode Active' : 'Camera Standby')}</span>
           </div>
         </div>
       </header>
 
-      {/* Mode Selector Tabs */}
+      {/* Mode Tabs */}
       <div className="mode-tabs">
-        <button 
-          className={`tab-btn ${mode === 'webcam' ? 'active' : ''}`}
-          onClick={() => { setMode('webcam'); }}
-        >
-          <Camera size={16} /> Live Webcam Surveillance
-        </button>
         <button 
           className={`tab-btn ${mode === 'upload' ? 'active' : ''}`}
           onClick={() => { setMode('upload'); stopCamera(); }}
         >
-          <Upload size={16} /> Test Drone Image / File
+          <Upload size={16} /> 🎯 Instant Test Samples & File Upload
+        </button>
+        <button 
+          className={`tab-btn ${mode === 'webcam' ? 'active' : ''}`}
+          onClick={() => { setMode('webcam'); }}
+        >
+          <Camera size={16} /> 📹 Live Webcam Surveillance
         </button>
       </div>
 
@@ -337,15 +419,26 @@ function App() {
         <div className="glass-panel">
           {mode === 'webcam' ? (
             <div className="webcam-container">
+              {/* Video is ALWAYS mounted to prevent null ref bugs */}
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                muted 
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: isCameraActive ? 'block' : 'none' }} 
+              />
+              <canvas ref={captureCanvasRef} style={{ display: 'none' }} />
+              <canvas 
+                ref={webcamOverlayCanvasRef} 
+                className="hud-overlay-canvas" 
+                style={{ display: isCameraActive ? 'block' : 'none' }} 
+              />
+
               {isCameraActive ? (
                 <>
-                  <video ref={videoRef} autoPlay playsInline muted />
-                  <canvas ref={captureCanvasRef} style={{ display: 'none' }} />
-                  <canvas ref={overlayCanvasRef} className="hud-overlay-canvas" />
-
                   <div className="overlay">
                     <Crosshair size={16} color="#ef4444" />
-                    <span>Live Optical Feed (Active)</span>
+                    <span>Live Optical Stream (Monitoring at 30 FPS)</span>
                   </div>
 
                   {latestDetection && (
@@ -358,9 +451,9 @@ function App() {
               ) : (
                 <div className="camera-standby-view">
                   <VideoOff size={48} color="#64748b" style={{ marginBottom: '1rem' }} />
-                  <h3>Optical Sensor in Standby</h3>
-                  <p style={{ color: '#94a3b8', fontSize: '0.9rem', maxWidth: '360px', margin: '0 auto 1.5rem' }}>
-                    Webcam is currently inactive. Click below to initialize optical tracking.
+                  <h3>Optical Webcam in Standby</h3>
+                  <p style={{ color: '#94a3b8', fontSize: '0.9rem', maxWidth: '380px', margin: '0 auto 1.5rem' }}>
+                    Click below to initialize your laptop webcam and begin live GPU inference.
                   </p>
                   <button className="btn btn-detect" onClick={startCamera}>
                     <Play size={16} /> Start Live Surveillance Feed
@@ -369,43 +462,88 @@ function App() {
               )}
             </div>
           ) : (
-            <div className="upload-container">
-              {uploadedImageSrc ? (
-                <div style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
-                  <img 
-                    ref={uploadImgRef} 
-                    src={uploadedImageSrc} 
-                    alt="Drone Test" 
-                    className="uploaded-img-preview" 
-                  />
-                  <canvas ref={uploadOverlayCanvasRef} className="hud-overlay-canvas" />
-                </div>
-              ) : (
-                <div className="upload-dropzone">
-                  <Upload size={48} color="#60a5fa" style={{ marginBottom: '1rem' }} />
-                  <h3>Upload Airspace Image to Inspect</h3>
-                  <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
-                    Select a drone photo or snapshot for instant local GPU evaluation.
-                  </p>
-                </div>
-              )}
-
-              <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'center' }}>
-                <label className="btn btn-secondary file-input-label">
-                  <Upload size={16} /> Select Drone Image
-                  <input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
-                </label>
+            <div className="test-sample-container">
+              {/* Canvas viewport displaying image and bounding boxes */}
+              <div className="canvas-viewport-wrapper">
+                <canvas ref={imageCanvasRef} className="sample-render-canvas" />
+                {!selectedSample && !sampleResult && (
+                  <div className="empty-viewport-placeholder">
+                    <Upload size={44} color="#60a5fa" style={{ marginBottom: '0.75rem' }} />
+                    <h3>Click Any Test Sample Below</h3>
+                    <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
+                      Test authentic drone detections and distractor suppressions instantly with 1 click.
+                    </p>
+                  </div>
+                )}
+                {isLoadingSample && (
+                  <div className="loading-badge">Evaluating on NVIDIA GPU...</div>
+                )}
               </div>
 
-              {isProcessingUpload && (
-                <div style={{ textAlign: 'center', marginTop: '0.5rem', color: '#60a5fa' }}>
-                  Analyzing with local CUDA model...
+              {/* Status Banner for Test Result */}
+              {sampleResult && (
+                <div className={`result-alert-box ${sampleResult.detected ? 'alert-danger' : 'alert-success'}`}>
+                  {sampleResult.detected ? (
+                    <>
+                      <AlertTriangle size={18} color="#ef4444" />
+                      <div>
+                        <strong>TARGET CONFIRMED:</strong> {sampleResult.data.drone_name} (Confidence: {(sampleResult.data.confidence * 100).toFixed(1)}% • Latency: {sampleResult.inference_ms}ms)
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={18} color="#22c55e" />
+                      <div>
+                        <strong>AIRSPACE CLEAR:</strong> Non-Drone Object / Distractor Correctly Ignored (0 False Alarm • Latency: {sampleResult.inference_ms}ms)
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
+
+              {/* 1-Click Test Samples Grid */}
+              <div className="sample-selector-section">
+                <div className="sample-group-title">🎯 1-Click Drone Samples (Expected: DETECTED):</div>
+                <div className="sample-buttons-grid">
+                  {sampleImages.filter(s => s.category === 'drone').map(sample => (
+                    <button
+                      key={sample.id}
+                      className={`sample-btn drone-pill ${selectedSample?.id === sample.id ? 'active' : ''}`}
+                      onClick={() => handleSelectSample(sample)}
+                    >
+                      <span className="sample-dot-red"></span>
+                      {sample.name}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="sample-group-title" style={{ marginTop: '0.75rem' }}>
+                  🛡️ 1-Click Negative Distractors (Expected: AIRSPACE CLEAR / 0 False Alarm):
+                </div>
+                <div className="sample-buttons-grid">
+                  {sampleImages.filter(s => s.category === 'distractor').map(sample => (
+                    <button
+                      key={sample.id}
+                      className={`sample-btn distractor-pill ${selectedSample?.id === sample.id ? 'active' : ''}`}
+                      onClick={() => handleSelectSample(sample)}
+                    >
+                      <span className="sample-dot-green"></span>
+                      {sample.name}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'center' }}>
+                  <label className="btn btn-secondary file-input-label">
+                    <Upload size={16} /> Upload Custom Image From Your PC
+                    <input type="file" accept="image/*" onChange={handleCustomUpload} style={{ display: 'none' }} />
+                  </label>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Controls */}
+          {/* Tactical Controls & Tuning */}
           <div className="controls-row">
             {mode === 'webcam' && isCameraActive && (
               <div>
@@ -423,7 +561,7 @@ function App() {
               <input 
                 type="range" 
                 min="0.30" 
-                max="0.95" 
+                max="0.90" 
                 step="0.05"
                 value={confidenceThreshold}
                 onChange={(e) => setConfidenceThreshold(parseFloat(e.target.value))}
