@@ -16,22 +16,24 @@ print("=" * 60)
 backend_cmd = [VENV_PYTHON, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"]
 backend_cwd = os.path.join(BASE_DIR, "backend")
 print(f"[*] Starting Local Vision Backend on http://localhost:8000 ...")
+backend_log = open(os.path.join(BASE_DIR, "backend.log"), "w", encoding="utf-8")
 p_backend = subprocess.Popen(
     backend_cmd,
     cwd=backend_cwd,
-    stdout=subprocess.DEVNULL,
-    stderr=subprocess.DEVNULL
+    stdout=backend_log,
+    stderr=subprocess.STDOUT
 )
 
 # 2. Start Vite Frontend on Port 5173
 frontend_cmd = ["cmd.exe", "/c", "npm", "run", "dev", "--", "--port", "5173", "--host"]
 frontend_cwd = os.path.join(BASE_DIR, "frontend")
 print(f"[*] Starting Reactive Tactical Frontend on http://localhost:5173 ...")
+frontend_log = open(os.path.join(BASE_DIR, "frontend.log"), "w", encoding="utf-8")
 p_frontend = subprocess.Popen(
     frontend_cmd,
     cwd=frontend_cwd,
-    stdout=subprocess.DEVNULL,
-    stderr=subprocess.DEVNULL
+    stdout=frontend_log,
+    stderr=subprocess.STDOUT
 )
 
 print("\n[*] Initializing services and verifying ports...")

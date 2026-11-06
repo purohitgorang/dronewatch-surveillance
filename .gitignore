@@ -9,3 +9,12 @@ __pycache__/
 venv/
 .DS_Store
 Thumbs.db
+
+*.log
+*.part
+*.tmp
+
+backend/yolov8n.pt
+backend/models/drone_flying_objects_yolov8m.pt
+backend/models/drone_iris_yolov8s.pt
+backend/models/drone_tuzelkhan_yolov8.pt
