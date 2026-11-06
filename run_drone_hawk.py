@@ -13,7 +13,7 @@ print("          LAUNCHING DRONE HAWK X LOCALLY")
 print("=" * 60)
 
 # 1. Start FastAPI Backend on Port 8000
-backend_cmd = [VENV_PYTHON, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"]
+backend_cmd = [VENV_PYTHON, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000", "--reload"]
 backend_cwd = os.path.join(BASE_DIR, "backend")
 print(f"[*] Starting Local Vision Backend on http://localhost:8000 ...")
 backend_log = open(os.path.join(BASE_DIR, "backend.log"), "w", encoding="utf-8")
