@@ -1346,3 +1346,274 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   Real-World Flight Video Mission & Dynamic Kinematic Telemetry Styles
+   ========================================================================== */
+
+.optical-mode-switcher {
+  display: flex;
+  gap: 0.5rem;
+  background: #050811;
+  padding: 0.35rem;
+  border-radius: 4px;
+  border: 1.5px solid var(--border-dim);
+  margin-bottom: 1rem;
+}
+
+.mode-switch-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0.65rem 1.15rem;
+  background: transparent;
+  border: 1.5px solid transparent;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+
+.mode-switch-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mode-switch-btn.active {
+  background: #000;
+  border-color: var(--color-cyan);
+  color: var(--color-cyan);
+  box-shadow: 2px 2px 0px var(--color-cyan);
+}
+
+.video-mission-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.mission-selector-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+}
+
+@media (max-width: 1024px) {
+  .mission-selector-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.mission-card {
+  background: #070c18;
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 0.95rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.2s;
+  box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.5);
+  text-align: left;
+}
+
+.mission-card:hover {
+  border-color: rgba(0, 240, 255, 0.5);
+  transform: translateY(-2px);
+}
+
+.mission-card.active {
+  background: #0a1326;
+  border-color: var(--color-cyan);
+  box-shadow: 3px 3px 0px var(--color-cyan);
+}
+
+.mission-card-top {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.45rem;
+}
+
+.mission-card-icon {
+  font-size: 1.35rem;
+}
+
+.mission-card-title {
+  font-size: 0.86rem;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.25;
+}
+
+.mission-card-desc {
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  line-height: 1.38;
+  margin-bottom: 0.75rem;
+}
+
+.mission-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mission-badge-breach {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #ff6699;
+  background: rgba(255, 0, 85, 0.15);
+  padding: 0.2rem 0.5rem;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 0, 85, 0.35);
+}
+
+.mission-badge-clear {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #86efac;
+  background: rgba(0, 255, 136, 0.15);
+  padding: 0.2rem 0.5rem;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 255, 136, 0.35);
+}
+
+.mission-badge-status {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--color-cyan);
+  font-weight: 700;
+}
+
+.mission-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: #070c18;
+  padding: 0.85rem 1.15rem;
+  border: 1.5px solid var(--border-dim);
+  border-radius: 4px;
+}
+
+.mission-telemetry-strip {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 900px) {
+  .mission-telemetry-strip {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.m-telemetry-pill {
+  background: #070c18;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.65rem 0.85rem;
+  border-radius: 3px;
+  display: flex;
+  flex-direction: column;
+}
+
+.m-telemetry-pill .m-label {
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.m-telemetry-pill .m-val {
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: #fff;
+  margin-top: 0.2rem;
+}
+
+.video-player-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 520px;
+  background: #000;
+  border: 2px solid var(--color-cyan);
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.7);
+}
+
+.video-player-container video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-mission-banner {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  padding: 0.55rem 1rem;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 800;
+  z-index: 10;
+  border: 1.5px solid #000;
+}
+
+.video-mission-banner.breach {
+  background: var(--color-red);
+  color: #fff;
+  box-shadow: 3px 3px 0px #000;
+}
+
+.video-mission-banner.secure {
+  background: var(--color-green);
+  color: #000;
+  box-shadow: 3px 3px 0px #000;
+}
+
+/* Video Benchmark Table in Analytics */
+.video-benchmark-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+  font-size: 0.82rem;
+}
+
+.video-benchmark-table th {
+  background: #050811;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-weight: 800;
+  text-align: left;
+  padding: 0.7rem 0.85rem;
+  border-bottom: 2px solid var(--border-dim);
+}
+
+.video-benchmark-table td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-family: var(--font-mono);
+  color: #fff;
+}

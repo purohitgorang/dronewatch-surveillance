@@ -18,3 +18,6 @@ backend/yolov8n.pt
 backend/models/drone_flying_objects_yolov8m.pt
 backend/models/drone_iris_yolov8s.pt
 backend/models/drone_tuzelkhan_yolov8.pt
+
+backend/test_samples/analyzed_*.mp4
+backend/test_samples/upload_*.mp4
