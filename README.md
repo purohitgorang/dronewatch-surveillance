@@ -7,6 +7,10 @@
 [![YOLOv8](https://img.shields.io/badge/YOLOv8-Edge%20Vision-orange.svg)](https://github.com/ultralytics/ultralytics)
 [![PyTorch CUDA](https://img.shields.io/badge/PyTorch-CUDA%20Accelerated-76b900.svg)](https://pytorch.org/)
 
+<p align="center">
+  <img src="assets/drone-hawk-glass-ui.png" alt="Drone Hawk X Minimalist Glass UI" width="100%" />
+</p>
+
 **Drone Hawk X** is an air-gapped, edge computer vision system engineered for automated airspace perimeter defense. It detects unauthorized multi-rotor UAVs and fixed-wing drones locally on-device, operating with **zero external cloud dependencies, zero telemetry leakage, and zero recurring API costs**.
 
 ---
@@ -139,8 +143,3 @@ python test_accuracy.py
 | `POST` | `/detect?conf=0.50` | Multipart image inspection returning verified drone bounding boxes |
 | `GET` | `/logs` | Full history of airspace intrusions and timestamps |
 | `DELETE` | `/logs` | Flush in-memory incident log |
-
----
-
-## 📄 License
-MIT License. Copyright (c) 2026 Gorang Purohit.
