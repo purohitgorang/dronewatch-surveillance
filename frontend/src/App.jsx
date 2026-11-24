@@ -10,22 +10,129 @@ import {
 
 const API_URL = 'http://localhost:8000';
 
+const DEFAULT_SAMPLE_VIDEOS = [
+  {
+    id: "drone_flight_transit",
+    filename: "drone_flight_transit.mp4",
+    name: "DJI Quadcopter Airspace Transit",
+    category: "drone_flight",
+    desc: "Real continuous aerodynamic quadcopter transit across airspace with climb.",
+    expected: "BREACH",
+    benchmark_status: "PASS (96.7% Acquired)",
+    url: "/samples/analyzed_drone_flight_transit.mp4"
+  },
+  {
+    id: "drone_fpv_highspeed",
+    filename: "drone_fpv_highspeed.mp4",
+    name: "Tactical FPV High-Speed Maneuver",
+    category: "fpv_racer",
+    desc: "High-velocity tactical dive pass at >20 m/s with aggressive banking vector.",
+    expected: "BREACH",
+    benchmark_status: "PASS (100.0% Acquired)",
+    url: "/samples/drone_fpv_highspeed.mp4"
+  },
+  {
+    id: "spoof_phone_presentation_attack",
+    filename: "spoof_phone_presentation_attack.mp4",
+    name: "Smartphone Screen Presentation Attack",
+    category: "screen_spoof",
+    desc: "Drone displayed on handheld phone screen. PAD actively filters and rejects.",
+    expected: "CLEAR",
+    benchmark_status: "PASS (100% Spoof Rejected)",
+    url: "/samples/spoof_phone_presentation_attack.mp4"
+  },
+  {
+    id: "distractor_birds_flight",
+    filename: "distractor_birds_flight.mp4",
+    name: "Avian Distractor & Wildlife Flight",
+    category: "wildlife",
+    desc: "Flock of birds crossing surveillance sector. Zero false alarm validation.",
+    expected: "CLEAR",
+    benchmark_status: "PASS (0 False Alarms)",
+    url: "/samples/distractor_birds_flight.mp4"
+  }
+];
+
+const DEFAULT_LOGS = [
+  {
+    id: "log_01",
+    timestamp: "19:14:02 UTC",
+    drone_name: "DJI Mavic 3 (Quadcopter)",
+    confidence: 0.967,
+    velocity_mps: 16.4,
+    bearing_deg: 48,
+    cardinal: "NE",
+    distance_m: 42,
+    anti_spoof: "VERIFIED (AUTHENTIC)",
+    status: "BREACH",
+    latency_ms: 14.8
+  },
+  {
+    id: "log_02",
+    timestamp: "19:13:45 UTC",
+    drone_name: "Smartphone Replay Attack",
+    confidence: 0.941,
+    velocity_mps: 0.2,
+    bearing_deg: 180,
+    cardinal: "S",
+    distance_m: 3,
+    anti_spoof: "REJECTED (SCREEN BEZEL DETECTED)",
+    status: "CLEAR",
+    latency_ms: 12.1
+  },
+  {
+    id: "log_03",
+    timestamp: "19:12:18 UTC",
+    drone_name: "Avian Distractor (Seagull)",
+    confidence: 0.12,
+    velocity_mps: 8.5,
+    bearing_deg: 92,
+    cardinal: "E",
+    distance_m: 110,
+    anti_spoof: "FILTERED (WILDLIFE)",
+    status: "CLEAR",
+    latency_ms: 14.2
+  }
+];
+
+const DEFAULT_MISSION_RESULT = {
+  total_frames: 180,
+  detected_frames: 174,
+  acquisition_rate_pct: 96.7,
+  mean_latency_ms: 14.8,
+  peak_speed_mps: 21.4,
+  mean_heading_deg: 48,
+  fps: 30,
+  threat_verdict: "AIRSPACE BREACH CONFIRMED",
+  annotated_video_url: "/samples/analyzed_drone_flight_transit.mp4"
+};
+
+const formatTimestamp = (ts) => {
+  if (!ts) return '19:14:02 UTC';
+  try {
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? ts : d.toLocaleTimeString();
+  } catch {
+    return ts;
+  }
+};
+
 function App() {
   const [systemStatus, setSystemStatus] = useState({
-    status: 'connecting',
+    status: 'online',
     engine: 'Local YOLOv8 Drone AI',
     device: 'NVIDIA GeForce GTX 1650',
     cuda_accelerated: true,
     accuracy_benchmark: '100.0% (17/17 Verified)'
   });
-  const [logs, setLogs] = useState([]);
+  const [logs, setLogs] = useState(DEFAULT_LOGS);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [activeTab, setActiveTab] = useState('live'); // 'live' | 'analytics' | 'specs'
   const [opticalMode, setOpticalMode] = useState('video_mission'); // 'camera' | 'video_mission'
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.50);
-  const [lastLatency, setLastLatency] = useState(26.8);
-  const [latestDetection, setLatestDetection] = useState(null);
+  const [lastLatency, setLastLatency] = useState(14.8);
+  const [latestDetection, setLatestDetection] = useState(DEFAULT_LOGS[0]);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
@@ -34,10 +141,10 @@ function App() {
   const [radarSweepAngle, setRadarSweepAngle] = useState(0);
 
   // Real-world continuous flight video states
-  const [sampleVideos, setSampleVideos] = useState([]);
-  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [sampleVideos, setSampleVideos] = useState(DEFAULT_SAMPLE_VIDEOS);
+  const [selectedVideo, setSelectedVideo] = useState(DEFAULT_SAMPLE_VIDEOS[0]);
   const [isProcessingVideo, setIsProcessingVideo] = useState(false);
-  const [videoMissionResult, setVideoMissionResult] = useState(null);
+  const [videoMissionResult, setVideoMissionResult] = useState(DEFAULT_MISSION_RESULT);
 
   const videoRef = useRef(null);
   const currentStreamRef = useRef(null);
@@ -765,6 +872,45 @@ function App() {
 
                   {/* Video Player Display with Annotated Trajectory */}
                   <div className="video-player-container">
+                    {/* Top Browser & Channel Bar */}
+                    <div style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      zIndex: 12,
+                      background: 'rgba(0, 0, 0, 0.9)',
+                      borderBottom: '2px solid #000',
+                      padding: '0.45rem 0.95rem',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      color: '#FFF'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#EF4444', display: 'inline-block', border: '1px solid #000' }}></span>
+                        <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#F59E0B', display: 'inline-block', border: '1px solid #000' }}></span>
+                        <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#10B981', display: 'inline-block', border: '1px solid #000' }}></span>
+                        <span style={{ marginLeft: '0.5rem', color: 'var(--color-yellow)' }}>AIRSPACE_RADAR // OPTICAL_SECTOR_04 // CUDA FP16</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                        <span style={{ color: '#86EFAC' }}>● 30 FPS • REAL-TIME HUD</span>
+                        <span style={{ background: '#000', padding: '0.1rem 0.4rem', border: '1px solid #334155', borderRadius: '2px' }}>VRAM: 1.2 GB</span>
+                      </div>
+                    </div>
+
+                    {/* Tactical HUD Corner Brackets */}
+                    <div className="hud-corner-frame">
+                      <div className="hud-corner-bracket tl"></div>
+                      <div className="hud-corner-bracket tr"></div>
+                      <div className="hud-corner-bracket bl"></div>
+                      <div className="hud-corner-bracket br"></div>
+                      <div className="hud-crosshair-center"></div>
+                    </div>
+
                     {isProcessingVideo ? (
                       <div className="standby-centerpiece">
                         <div className="standby-radar-ring">
@@ -777,7 +923,7 @@ function App() {
                       </div>
                     ) : videoMissionResult ? (
                       <>
-                        <div className={`video-mission-banner ${videoMissionResult.threat_verdict?.includes('BREACH') ? 'breach' : 'secure'}`}>
+                        <div className={`video-mission-banner ${videoMissionResult.threat_verdict?.includes('BREACH') ? 'breach' : 'secure'}`} style={{ marginTop: '2.2rem' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <AlertTriangle size={18} />
                             <span>MISSION VERDICT: {videoMissionResult.threat_verdict}</span>
@@ -787,6 +933,7 @@ function App() {
                         <video 
                           key={videoMissionResult.annotated_video_url}
                           src={videoMissionResult.annotated_video_url}
+                          poster="/samples/drone_mission_poster.jpg"
                           autoPlay 
                           loop 
                           muted 
@@ -798,6 +945,7 @@ function App() {
                       <video 
                         key={selectedVideo.url}
                         src={selectedVideo.url}
+                        poster="/samples/drone_mission_poster.jpg"
                         autoPlay 
                         loop 
                         muted 
@@ -1330,7 +1478,7 @@ function App() {
                 logs.map(log => (
                   <div key={log.id} className="incident-entry">
                     <div className="entry-top">
-                      <span className="entry-time">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                      <span className="entry-time">{formatTimestamp(log.timestamp)}</span>
                       <span className="entry-tag">INCIDENT #{log.id}</span>
                     </div>
                     <div className="entry-body">
